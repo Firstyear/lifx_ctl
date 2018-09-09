@@ -1,0 +1,18 @@
+[package]
+name = "lifx_ctl"
+version = "0.1.0"
+authors = ["william"]
+
+[dependencies]
+
+actix = "0.7"
+actix-web = "0.7"
+
+serde = "1.0"
+serde_json = "1.0"
+serde_derive = "1.0"
+
+lifx-core = "*"
+time = "0.1"
+
+
