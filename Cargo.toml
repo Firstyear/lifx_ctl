@@ -14,5 +14,7 @@ serde_derive = "1.0"
 
 lifx-core = "*"
 time = "0.1"
+futures = "0.1"
+tokio = "0.1"
 
 
