@@ -51,7 +51,11 @@ impl Actor for LifxController {
 }
 
 #[derive(Debug)]
-pub struct LifxControllerSetColour(pub HSBK);
+struct LifxControllerSetColour {
+    pub addr: SocketAddr,
+    pub duration: u16,
+    pub colour: HSBK,
+}
 
 impl Message for LifxControllerSetColour {
     type Result = ();
@@ -138,16 +142,17 @@ impl Handler<LogEvent> for LogActor {
 pub struct LightManager {
     bulbs: Vec<LightBulb>,
     log_addr: actix::Addr<LogActor>,
+    lifx: actix::Addr<LifxController>,
 }
 
 impl LightManager {
-    pub fn new(log_addr: actix::Addr<LogActor>) -> Self {
+    pub fn new(log_addr: actix::Addr<LogActor>,
+        lifx: actix::Addr<LifxController>) -> Self {
         // Init all the light plans and attach them here?
-
-
         LightManager {
             log_addr: log_addr,
             bulbs: Vec::new(),
+            lifx: lifx,
         }
     }
 
@@ -205,13 +210,25 @@ impl Handler<LightManagerShift> for LightManager {
     type Result = ();
 
     fn handle(&mut self, _req: LightManagerShift, ctx: &mut Context<Self>) -> Self::Result {
-        // Temporary
-        let plan = plans::LightPlan::RedshiftToilet;
-        let shift = plan.shift(time::now());
-        log_event!(self.log_addr, "Shift requested to {:?}", shift);
-
-
-
+        for b in self.bulbs.iter() {
+            let plan = plans::LightPlan::RedshiftToilet;
+            let shift = plan.shift(time::now());
+            match shift {
+                Some(lshift) => {
+                    log_event!(self.log_addr, "Shift requested to {:?}", lshift);
+                    self.lifx.do_send(
+                        LifxControllerSetColour {
+                            addr: b.addr.clone(),
+                            duration: lshift.duration,
+                            colour: lshift.colour.clone(),
+                        }
+                    );
+                }
+                _ => {
+                    log_event!(self.log_addr, "No shift for {}", b.name.as_str());
+                }
+            }
+        }; // end for
     }
 }
 

@@ -38,7 +38,7 @@ fn main() {
 
     let lifx_addr = LifxController::new(logactor_addr.clone()).start();
 
-    let lm = LightManager::new(logactor_addr.clone()).start();
+    let lm = LightManager::new(logactor_addr.clone(), lifx_addr.clone()).start();
 
     // For now, we cheat and pre-reg the bulbs.
 
