@@ -23,7 +23,7 @@ fn rshift_calc(vmax: u16, vmin: u16, hour: i32, hlow: i32, hhigh: i32, min: i32)
 #[derive(Debug, PartialEq)]
 pub struct LightShift {
     pub colour: HSBK,
-    pub duration: u16,
+    pub duration: u32,
 }
 
 #[derive(Debug)]
@@ -81,6 +81,7 @@ impl LightPlan {
                             hue: 0,
                             saturation: 0,
                             brightness: 33000,
+                            // brightness: 65535,
                             kelvin: 2750,
                          }
                     }

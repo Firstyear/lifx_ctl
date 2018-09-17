@@ -53,7 +53,7 @@ impl Actor for LifxController {
 #[derive(Debug)]
 struct LifxControllerSetColour {
     pub addr: SocketAddr,
-    pub duration: u16,
+    pub duration: u32,
     pub colour: HSBK,
 }
 
@@ -65,7 +65,35 @@ impl Handler<LifxControllerSetColour> for LifxController {
     type Result = ();
 
     fn handle(&mut self, event: LifxControllerSetColour, _: &mut Context<Self>) -> Self::Result {
+
+        // Set the default lifx options. This could be good to cache in the struct?
+
+        let opts = lifx_core::BuildOptions {
+            // target: Some(event.addr),
+            // source: 12345678,
+            ..Default::default()
+        };
+        let rawmsg = lifx_core::RawMessage::build(&opts,
+            lifx_core::Message::LightSetColor {
+                reserved: 0,
+                color: event.colour,
+                duration: event.duration,
+            }
+        ).unwrap();
+
+        let bytes = rawmsg.pack().unwrap();
+
         log_event!(self.log_addr, "Change colour to: {:?}", event);
+
+        let res = self.sock.send_to(&bytes, &(event.addr));
+        match res {
+            Ok(_) => {
+                log_event!(self.log_addr, "event success");
+            }
+            Err(e) => {
+                log_event!(self.log_addr, "Failed to send {}", e);
+            }
+        };
     }
 }
 
@@ -138,9 +166,14 @@ impl Handler<LogEvent> for LogActor {
     }
 }
 
+struct LightBulbState {
+    bulb: LightBulb,
+    plan: plans::LightPlan,
+    last_event: time::Tm,
+}
 
 pub struct LightManager {
-    bulbs: Vec<LightBulb>,
+    bulbs: Vec<LightBulbState>,
     log_addr: actix::Addr<LogActor>,
     lifx: actix::Addr<LifxController>,
 }
@@ -173,7 +206,19 @@ impl Handler<LightManagerRegister> for LightManager {
 
     fn handle(&mut self, reg: LightManagerRegister, _: &mut Context<Self>) -> Self::Result {
         log_event!(self.log_addr, "Registered {}", reg.0.name);
-        self.bulbs.push(reg.0);
+
+        // TODO: This should make a registration object that is mutable.
+        let plan = if reg.0.name == "toilet" {
+            plans::LightPlan::RedshiftToilet
+        } else {
+            plans::LightPlan::RedshiftMain
+        };
+
+        self.bulbs.push(LightBulbState {
+            bulb: reg.0,
+            plan: plan,
+            last_event: time::empty_tm(),
+        });
 
         Ok(())
     }
@@ -191,7 +236,7 @@ impl Handler<LightManagerStatus> for LightManager {
     fn handle(&mut self, _req: LightManagerStatus, ctx: &mut Context<Self>) -> Self::Result {
         log_event!(self.log_addr, "Status req");
         let status: Vec<LightBulbStatus> = self.bulbs.iter().map( |b| {
-            let s = b.status();
+            let s = b.bulb.status();
             log_event!(self.log_addr, "status inner: {:?}", s);
             s
         }).collect();
@@ -210,22 +255,30 @@ impl Handler<LightManagerShift> for LightManager {
     type Result = ();
 
     fn handle(&mut self, _req: LightManagerShift, ctx: &mut Context<Self>) -> Self::Result {
-        for b in self.bulbs.iter() {
-            let plan = plans::LightPlan::RedshiftToilet;
-            let shift = plan.shift(time::now());
+        for b in self.bulbs.iter_mut() {
+            let t_now = time::now();
+
+            let shift = if t_now > b.last_event {
+                b.plan.shift(t_now)
+            } else {
+                None
+            };
+
             match shift {
                 Some(lshift) => {
                     log_event!(self.log_addr, "Shift requested to {:?}", lshift);
                     self.lifx.do_send(
                         LifxControllerSetColour {
-                            addr: b.addr.clone(),
+                            addr: b.bulb.addr.clone(),
                             duration: lshift.duration,
                             colour: lshift.colour.clone(),
                         }
                     );
+                    // Update the shift event
+                    b.last_event = t_now + time::Duration::milliseconds(lshift.duration as i64);
                 }
                 _ => {
-                    log_event!(self.log_addr, "No shift for {}", b.name.as_str());
+                    log_event!(self.log_addr, "No shift for {}", b.bulb.name.as_str());
                 }
             }
         }; // end for
