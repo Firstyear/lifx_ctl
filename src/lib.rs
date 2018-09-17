@@ -13,6 +13,9 @@ extern crate time;
 extern crate lifx_core;
 use lifx_core::HSBK;
 
+extern crate rand;
+use rand::{thread_rng, Rng};
+
 pub mod plans;
 
 // Helper for internal logging.
@@ -25,6 +28,20 @@ macro_rules! log_event {
                 )
             }
         )
+    })
+}
+
+macro_rules! send_bytes {
+    ($log_addr:expr, $sock:expr, $bytes:expr, $addr:expr) => ({
+        let res = $sock.send_to($bytes, $addr);
+        match res {
+            Ok(_) => {
+                log_event!($log_addr, "event success");
+            }
+            Err(e) => {
+                log_event!($log_addr, "Failed to send {}", e);
+            }
+        };
     })
 }
 
@@ -54,6 +71,7 @@ impl Actor for LifxController {
 struct LifxControllerSetColour {
     pub addr: SocketAddr,
     pub duration: u32,
+    pub flicker: bool,
     pub colour: HSBK,
 }
 
@@ -67,12 +85,14 @@ impl Handler<LifxControllerSetColour> for LifxController {
     fn handle(&mut self, event: LifxControllerSetColour, _: &mut Context<Self>) -> Self::Result {
 
         // Set the default lifx options. This could be good to cache in the struct?
+        log_event!(self.log_addr, "Change colour to: {:?}", event);
 
         let opts = lifx_core::BuildOptions {
             // target: Some(event.addr),
             // source: 12345678,
             ..Default::default()
         };
+
         let rawmsg = lifx_core::RawMessage::build(&opts,
             lifx_core::Message::LightSetColor {
                 reserved: 0,
@@ -80,20 +100,45 @@ impl Handler<LifxControllerSetColour> for LifxController {
                 duration: event.duration,
             }
         ).unwrap();
+        let raw_bytes = rawmsg.pack().unwrap();
 
-        let bytes = rawmsg.pack().unwrap();
+        // Always set once, even on flicker, to make sure it's the colour
+        send_bytes!(self.log_addr, self.sock, &raw_bytes, &(event.addr));
 
-        log_event!(self.log_addr, "Change colour to: {:?}", event);
+        let mut rng = thread_rng();
+        let r = rng.gen_range(0, 6);
 
-        let res = self.sock.send_to(&bytes, &(event.addr));
-        match res {
-            Ok(_) => {
-                log_event!(self.log_addr, "event success");
-            }
-            Err(e) => {
-                log_event!(self.log_addr, "Failed to send {}", e);
-            }
-        };
+        if event.flicker && r == 0 {
+
+            let flick_rawmsg = lifx_core::RawMessage::build(&opts,
+                lifx_core::Message::LightSetColor {
+                    reserved: 0,
+                    color: HSBK {
+                        hue: 0,
+                        saturation: 0,
+                        brightness: 0,
+                        kelvin: 0,
+                    },
+                    duration: event.duration,
+                }
+            ).unwrap();
+            let flick_bytes = flick_rawmsg.pack().unwrap();
+
+            for i in 0..rng.gen_range(1, 4) {
+                use std::time::Duration;
+                use std::thread;
+                {
+                    let d = rng.gen_range(0, 6);
+                    thread::sleep(Duration::from_millis(d * 25));
+                    send_bytes!(self.log_addr, self.sock, &flick_bytes, &(event.addr));
+                }
+                {
+                    let d = rng.gen_range(0, 6);
+                    thread::sleep(Duration::from_millis(d * 25));
+                    send_bytes!(self.log_addr, self.sock, &raw_bytes, &(event.addr));
+                }
+            } // end for
+        } // end flicker
     }
 }
 
@@ -271,6 +316,7 @@ impl Handler<LightManagerShift> for LightManager {
                         LifxControllerSetColour {
                             addr: b.bulb.addr.clone(),
                             duration: lshift.duration,
+                            flicker: lshift.flicker,
                             colour: lshift.colour.clone(),
                         }
                     );
@@ -282,6 +328,39 @@ impl Handler<LightManagerShift> for LightManager {
                 }
             }
         }; // end for
+    }
+}
+
+pub struct LightManagerPlanChange {
+    plan: plans::LightPlan
+}
+
+impl Message for LightManagerPlanChange {
+    type Result = ();
+}
+
+impl Handler<LightManagerPlanChange> for LightManager {
+    type Result = ();
+
+    fn handle(&mut self, req: LightManagerPlanChange, ctx: &mut Context<Self>) -> Self::Result {
+
+        for b in self.bulbs.iter_mut() {
+            let prop_plan = if b.bulb.name == "toilet" {
+                if req.plan == plans::LightPlan::RedshiftMain {
+                    plans::LightPlan::RedshiftToilet
+                } else {
+                    plans::LightPlan::PartyHardToilet
+                }
+            } else {
+                req.plan
+            };
+            if prop_plan != b.plan {
+                log_event!(self.log_addr, "Changing to proposed plan {} -> {:?}", b.bulb.name.as_str(), prop_plan);
+                // Set the time to 0 to cause the change to be asap
+                b.last_event = time::empty_tm();
+                b.plan = prop_plan;
+            };
+        }
     }
 }
 
@@ -297,7 +376,6 @@ impl Handler<LightManagerShift> for LightManager {
 // Do we make multiple timers? Or one and modulo?
 
 pub struct IntervalActor {
-    count: usize,
     log_addr: actix::Addr<LogActor>,
     lm: actix::Addr<LightManager>,
 }
@@ -307,16 +385,27 @@ impl IntervalActor {
         lm: actix::Addr<LightManager>
         ) -> Self {
         IntervalActor {
-            count: 0,
             log_addr: log_addr,
             lm: lm,
         }
     }
 
     fn bulb_shift(&mut self) {
-        log_event!(self.log_addr, "Sched {}", self.count);
-        self.count += 1;
+        log_event!(self.log_addr, "shift ...");
         self.lm.do_send(LightManagerShift);
+    }
+
+    fn check_party(&mut self) {
+        let plan = if std::path::Path::new("/tmp/partyhard").exists() {
+            plans::LightPlan::PartyHardMain
+        } else {
+            plans::LightPlan::RedshiftMain
+        };
+        log_event!(self.log_addr, "Checking for party hard ... {:?}", plan);
+
+        self.lm.do_send(LightManagerPlanChange{
+            plan: plan
+        });
     }
 }
 
@@ -325,8 +414,11 @@ impl Actor for IntervalActor {
 
     // Called after the actor has started.
     fn started(&mut self, ctx: &mut Self::Context) {
-        ctx.run_interval(Duration::from_millis(2000), move |act, _ctx| {
+        ctx.run_interval(Duration::from_millis(1000), move |act, _ctx| {
             act.bulb_shift();
+        });
+        ctx.run_interval(Duration::from_millis(10000), move |act, _ctx| {
+            act.check_party();
         });
     }
 }
