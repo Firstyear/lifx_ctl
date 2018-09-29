@@ -71,7 +71,7 @@ fn main() {
         // .resource("/{name}", |r| r.method(actix_web::http::Method::GET).with(index))
         .resource("", |r| r.f(index))
         .resource("/", |r| r.f(index))
-    }).bind("127.0.0.1:8080")
+    }).bind("127.0.0.1:8081")
         .unwrap()
         .start();
 
