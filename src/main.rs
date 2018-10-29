@@ -55,9 +55,32 @@ fn main() {
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 13)), 56700)
     );
 
+    // 21, 22, 23
+    
+    let bulb_office = LightBulb::new(
+        "office".to_string(),
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 22)), 56700)
+    );
+    let bulb_kitchen = LightBulb::new(
+        "kitchen".to_string(),
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 23)), 56700)
+    );
+    let bulb_lamp = LightBulb::new(
+        "lamp".to_string(),
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 21)), 56700)
+    );
+    let bulb_deck = LightBulb::new(
+        "deck".to_string(),
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 24)), 56700)
+    );
+
     lm.try_send(LightManagerRegister(bulb_lounge)).unwrap();
     lm.try_send(LightManagerRegister(bulb_pole)).unwrap();
     lm.try_send(LightManagerRegister(bulb_toilet)).unwrap();
+    lm.try_send(LightManagerRegister(bulb_office)).unwrap();
+    lm.try_send(LightManagerRegister(bulb_kitchen)).unwrap();
+    lm.try_send(LightManagerRegister(bulb_lamp)).unwrap();
+    lm.try_send(LightManagerRegister(bulb_deck)).unwrap();
 
     let _int_addr = IntervalActor::new(logactor_addr.clone(), lm.clone())
         .start();
