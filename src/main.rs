@@ -55,8 +55,6 @@ fn main() {
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 13)), 56700)
     );
 
-    // 21, 22, 23
-    
     let bulb_office = LightBulb::new(
         "office".to_string(),
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 22)), 56700)
