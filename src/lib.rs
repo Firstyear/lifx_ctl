@@ -265,6 +265,8 @@ impl Handler<LightManagerRegister> for LightManager {
         // TODO: This should make a registration object that is mutable.
         let plan = if reg.0.name == "toilet" {
             plans::LightPlan::RedshiftToilet
+        } else if reg.0.name == "kitchen" {
+            plans::LightPlan::RedshiftKitchen
         } else {
             plans::LightPlan::RedshiftMain
         };
