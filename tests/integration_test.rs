@@ -36,6 +36,7 @@ fn plan_redshift_main() {
     // At midday it should be max white
     assert_shift(&redshift_main, "12:00:00", Some(LightShift {
         duration: 4000,
+        flicker: false,
         colour: HSBK {
             hue: 0,
             saturation: 0,
@@ -46,16 +47,39 @@ fn plan_redshift_main() {
     // at 16:30 mid afternoon we start evening.
     assert_shift(&redshift_main, "16:30:00", Some(LightShift {
         duration: 4000,
+        flicker: false,
         colour: HSBK {
             hue: 0,
             saturation: 0,
-            brightness: 55267,
+            brightness: 62112,
             kelvin: 4000,
         }})
     );
     // at 17:00 we start evening.
     assert_shift(&redshift_main, "17:00:00", Some(LightShift {
         duration: 4000,
+        flicker: false,
+        colour: HSBK {
+            hue: 0,
+            saturation: 0,
+            brightness: 58690,
+            kelvin: 4000,
+        }})
+    );
+    assert_shift(&redshift_main, "18:00:00", Some(LightShift {
+        duration: 4000,
+        flicker: false,
+        colour: HSBK {
+            hue: 0,
+            saturation: 0,
+            brightness: 51845,
+            kelvin: 4000,
+        }})
+    );
+    // at 19:00 we are night
+    assert_shift(&redshift_main, "19:00:00", Some(LightShift {
+        duration: 4000,
+        flicker: false,
         colour: HSBK {
             hue: 0,
             saturation: 0,
@@ -63,28 +87,10 @@ fn plan_redshift_main() {
             kelvin: 4000,
         }})
     );
-    assert_shift(&redshift_main, "18:00:00", Some(LightShift {
-        duration: 4000,
-        colour: HSBK {
-            hue: 0,
-            saturation: 0,
-            brightness: 39000,
-            kelvin: 3375,
-        }})
-    );
-    // at 19:00 we are night
-    assert_shift(&redshift_main, "19:00:00", Some(LightShift {
-        duration: 4000,
-        colour: HSBK {
-            hue: 0,
-            saturation: 0,
-            brightness: 33000,
-            kelvin: 2750,
-        }})
-    );
     // at midnight
     assert_shift(&redshift_main, "00:00:00", Some(LightShift {
         duration: 4000,
+        flicker: false,
         colour: HSBK {
             hue: 0,
             saturation: 0,
@@ -95,6 +101,7 @@ fn plan_redshift_main() {
     // at 7 am
     assert_shift(&redshift_main, "07:00:00", Some(LightShift {
         duration: 4000,
+        flicker: false,
         colour: HSBK {
             hue: 0,
             saturation: 0,
@@ -112,6 +119,7 @@ fn plan_redshift_toilet() {
     // At midday it should be max white
     assert_shift(&redshift_toilet, "12:00:00", Some(LightShift {
         duration: 4000,
+        flicker: false,
         colour: HSBK {
             hue: 0,
             saturation: 0,
@@ -122,6 +130,7 @@ fn plan_redshift_toilet() {
     // mid evening
     assert_shift(&redshift_toilet, "20:00:00", Some(LightShift {
         duration: 4000,
+        flicker: false,
         colour: HSBK {
             hue: 0,
             saturation: 0,
@@ -132,6 +141,7 @@ fn plan_redshift_toilet() {
     // night
     assert_shift(&redshift_toilet, "00:00:00", Some(LightShift {
         duration: 4000,
+        flicker: false,
         colour: HSBK {
             hue: 0,
             saturation: 0,
@@ -149,14 +159,15 @@ fn simple_setup() {
 
         let logactor_addr = LogActor{ }.start();
 
-        let lm = LightManager::new(logactor_addr.clone());
+        let lifx_addr = LifxController::new(logactor_addr.clone()).start();
+        let lm = LightManager::new(logactor_addr.clone(), lifx_addr.clone());
         let lmaddr = lm.start();
 
         // add some bulbs
 
         let tbulb_1 = LightBulb::new(
             "tbulb1".to_string(),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 13)), 56700)
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 56700)
         );
 
         println!("b1: {:?}", tbulb_1);

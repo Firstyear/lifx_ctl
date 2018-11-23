@@ -73,6 +73,7 @@ pub struct LightShift {
 pub enum LightPlan {
     RedshiftMain,
     RedshiftToilet,
+    RedshiftKitchen,
     PartyHardMain,
     PartyHardToilet,
     Pause,
@@ -88,8 +89,8 @@ impl LightPlan {
                 // Helper values
                 let DAY_START = 8;
                 let DAY_END = 16;
-                let EVENING_END = 17;
-                let NIGHT_END = 19;
+                let EVENING_END = 19;
+                let NIGHT_END = 20;
 
                 Some(LightShift {
                     duration: 4000,
@@ -127,6 +128,43 @@ impl LightPlan {
                             brightness: 33000,
                             // brightness: 65535,
                             kelvin: 2750,
+                         }
+                    }
+                }) // End some
+            }
+            LightPlan::RedshiftKitchen => {
+                let DAY_START = 8;
+                let DAY_END = 18;
+                let NIGHT_END = 23;
+
+                // This may need an extra stepping perhaps
+
+                Some(LightShift {
+                    duration: 4000,
+                    flicker: false,
+                    colour: if hour >= DAY_START && hour < DAY_END {
+                        HSBK {
+                            hue: 0,
+                            saturation: 0,
+                            brightness: 65535,
+                            kelvin: 4000,
+                        }
+                    } else if hour >= DAY_END && hour < NIGHT_END {
+                        let bright = rshift_calc(65535, 33000, hour, DAY_END, NIGHT_END, minute);
+                        let k = rshift_calc(4000, 3250, hour, DAY_END, NIGHT_END, minute);
+
+                        HSBK {
+                            hue: 0,
+                            saturation: 0,
+                            brightness: bright as u16,
+                            kelvin: k as u16,
+                        }
+                    } else {
+                        HSBK {
+                            hue: 0,
+                            saturation: 0,
+                            brightness: 33000,
+                            kelvin: 3250,
                          }
                     }
                 }) // End some

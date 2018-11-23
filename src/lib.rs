@@ -33,10 +33,20 @@ macro_rules! log_event {
 
 macro_rules! send_bytes {
     ($log_addr:expr, $sock:expr, $bytes:expr, $addr:expr) => ({
-        let res = $sock.send_to($bytes, $addr);
-        match res {
+        let res1 = $sock.send_to($bytes, $addr);
+        match res1 {
             Ok(_) => {
-                log_event!($log_addr, "event success");
+                log_event!($log_addr, "event 1 success");
+            }
+            Err(e) => {
+                log_event!($log_addr, "Failed to send {}", e);
+            }
+        };
+        // Send twice to be sure ...
+        let res2 = $sock.send_to($bytes, $addr);
+        match res2 {
+            Ok(_) => {
+                log_event!($log_addr, "event 2 success");
             }
             Err(e) => {
                 log_event!($log_addr, "Failed to send {}", e);
@@ -351,6 +361,8 @@ impl Handler<LightManagerPlanChange> for LightManager {
                 } else {
                     plans::LightPlan::PartyHardToilet
                 }
+            } else if b.bulb.name == "kitchen" {
+                plans::LightPlan::RedshiftKitchen
             } else {
                 req.plan
             };
