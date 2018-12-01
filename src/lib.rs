@@ -267,6 +267,8 @@ impl Handler<LightManagerRegister> for LightManager {
             plans::LightPlan::RedshiftToilet
         } else if reg.0.name == "kitchen" {
             plans::LightPlan::RedshiftKitchen
+        } else if reg.0.name == "lamp" {
+            plans::LightPlan::Pause
         } else {
             plans::LightPlan::RedshiftMain
         };
@@ -365,6 +367,8 @@ impl Handler<LightManagerPlanChange> for LightManager {
                 }
             } else if b.bulb.name == "kitchen" {
                 plans::LightPlan::RedshiftKitchen
+            } else if b.bulb.name == "lamp" {
+                plans::LightPlan::Pause
             } else {
                 req.plan
             };
