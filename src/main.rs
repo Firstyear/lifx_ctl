@@ -63,10 +63,12 @@ fn main() {
         "kitchen".to_string(),
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 23)), 56700)
     );
+    /*
     let bulb_lamp = LightBulb::new(
         "lamp".to_string(),
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 21)), 56700)
     );
+    */
     let bulb_deck = LightBulb::new(
         "deck".to_string(),
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 24)), 56700)
