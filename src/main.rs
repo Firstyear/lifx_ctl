@@ -57,7 +57,7 @@ fn main() {
 
     let bulb_office = LightBulb::new(
         "office".to_string(),
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 22)), 56700)
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 21)), 56700)
     );
     let bulb_kitchen = LightBulb::new(
         "kitchen".to_string(),
@@ -65,7 +65,7 @@ fn main() {
     );
     let bulb_lamp = LightBulb::new(
         "lamp".to_string(),
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 21)), 56700)
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 22)), 56700)
     );
     let bulb_deck = LightBulb::new(
         "deck".to_string(),
