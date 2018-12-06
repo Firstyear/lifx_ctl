@@ -3,15 +3,16 @@ MAINTAINER william@blackhats.net.au
 
 LABEL "Name"="lifx"
 
-# RUN echo HTTP_PROXY="http://proxy-bne1.net.blackhats.net.au:3128" > /etc/sysconfig/proxy
+# /usr/bin/docker run --restart always --name lifx registry.blackhats.net.au/lifx
+RUN echo HTTP_PROXY="http://proxy-bne1.net.blackhats.net.au:3128" > /etc/sysconfig/proxy
 
 COPY . /home/lifx/
 
 WORKDIR /home/lifx/
 
-RUN zypper install -y timezone cargo rust rust-std && \
+RUN zypper install -y timezone cargo rust rust-std gcc && \
     RUSTC_BOOTSTRAP=1 cargo build --release && \
-    zypper rm -u -y cargo rust rust-std && \
+    zypper rm -u -y cargo rust rust-std gcc && \
     zypper clean
 
 RUN cd /etc && \
