@@ -1,14 +1,12 @@
 extern crate actix;
 use actix::prelude::*;
 extern crate futures;
-use futures::future::Future;
 
-use std::time::Duration;
+use std::net::SocketAddr;
 use std::net::UdpSocket;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::time::Duration;
 
 extern crate time;
-
 
 extern crate lifx_core;
 use lifx_core::HSBK;
@@ -32,7 +30,7 @@ macro_rules! log_event {
 }
 
 macro_rules! send_bytes {
-    ($log_addr:expr, $sock:expr, $bytes:expr, $addr:expr) => ({
+    ($log_addr:expr, $sock:expr, $bytes:expr, $addr:expr) => {{
         let res1 = $sock.send_to($bytes, $addr);
         match res1 {
             Ok(_) => {
@@ -52,7 +50,7 @@ macro_rules! send_bytes {
                 log_event!($log_addr, "Failed to send {}", e);
             }
         };
-    })
+    }};
 }
 
 // The actual lifx control bits
@@ -93,7 +91,6 @@ impl Handler<LifxControllerSetColour> for LifxController {
     type Result = ();
 
     fn handle(&mut self, event: LifxControllerSetColour, _: &mut Context<Self>) -> Self::Result {
-
         // Set the default lifx options. This could be good to cache in the struct?
         log_event!(self.log_addr, "Change colour to: {:?}", event);
 
@@ -103,13 +100,15 @@ impl Handler<LifxControllerSetColour> for LifxController {
             ..Default::default()
         };
 
-        let rawmsg = lifx_core::RawMessage::build(&opts,
+        let rawmsg = lifx_core::RawMessage::build(
+            &opts,
             lifx_core::Message::LightSetColor {
                 reserved: 0,
                 color: event.colour,
                 duration: event.duration,
-            }
-        ).unwrap();
+            },
+        )
+        .unwrap();
         let raw_bytes = rawmsg.pack().unwrap();
 
         // Always set once, even on flicker, to make sure it's the colour
@@ -119,8 +118,8 @@ impl Handler<LifxControllerSetColour> for LifxController {
         let r = rng.gen_range(0, 6);
 
         if event.flicker && r == 0 {
-
-            let flick_rawmsg = lifx_core::RawMessage::build(&opts,
+            let flick_rawmsg = lifx_core::RawMessage::build(
+                &opts,
                 lifx_core::Message::LightSetColor {
                     reserved: 0,
                     color: HSBK {
@@ -130,12 +129,12 @@ impl Handler<LifxControllerSetColour> for LifxController {
                         kelvin: 0,
                     },
                     duration: event.duration,
-                }
-            ).unwrap();
+                },
+            )
+            .unwrap();
             let flick_bytes = flick_rawmsg.pack().unwrap();
 
-            for i in 0..rng.gen_range(1, 4) {
-                use std::time::Duration;
+            for _i in 0..rng.gen_range(1, 4) {
                 use std::thread;
                 {
                     let d = rng.gen_range(0, 6);
@@ -217,7 +216,7 @@ impl Handler<LogEvent> for LogActor {
     type Result = ();
 
     fn handle(&mut self, event: LogEvent, _: &mut Context<Self>) -> Self::Result {
-        println!("EVENT: {}", event.msg );
+        println!("EVENT: {}", event.msg);
     }
 }
 
@@ -234,8 +233,7 @@ pub struct LightManager {
 }
 
 impl LightManager {
-    pub fn new(log_addr: actix::Addr<LogActor>,
-        lifx: actix::Addr<LifxController>) -> Self {
+    pub fn new(log_addr: actix::Addr<LogActor>, lifx: actix::Addr<LifxController>) -> Self {
         // Init all the light plans and attach them here?
         LightManager {
             log_addr: log_addr,
@@ -243,7 +241,6 @@ impl LightManager {
             lifx: lifx,
         }
     }
-
 }
 
 impl Actor for LightManager {
@@ -292,13 +289,17 @@ impl Message for LightManagerStatus {
 impl Handler<LightManagerStatus> for LightManager {
     type Result = Result<Vec<LightBulbStatus>, ()>;
 
-    fn handle(&mut self, _req: LightManagerStatus, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _req: LightManagerStatus, _ctx: &mut Context<Self>) -> Self::Result {
         log_event!(self.log_addr, "Status req");
-        let status: Vec<LightBulbStatus> = self.bulbs.iter().map( |b| {
-            let s = b.bulb.status();
-            log_event!(self.log_addr, "status inner: {:?}", s);
-            s
-        }).collect();
+        let status: Vec<LightBulbStatus> = self
+            .bulbs
+            .iter()
+            .map(|b| {
+                let s = b.bulb.status();
+                log_event!(self.log_addr, "status inner: {:?}", s);
+                s
+            })
+            .collect();
 
         Ok(status)
     }
@@ -313,7 +314,7 @@ impl Message for LightManagerShift {
 impl Handler<LightManagerShift> for LightManager {
     type Result = ();
 
-    fn handle(&mut self, _req: LightManagerShift, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _req: LightManagerShift, _ctx: &mut Context<Self>) -> Self::Result {
         for b in self.bulbs.iter_mut() {
             let t_now = time::now();
 
@@ -326,14 +327,12 @@ impl Handler<LightManagerShift> for LightManager {
             match shift {
                 Some(lshift) => {
                     log_event!(self.log_addr, "Shift requested to {:?}", lshift);
-                    self.lifx.do_send(
-                        LifxControllerSetColour {
-                            addr: b.bulb.addr.clone(),
-                            duration: lshift.duration,
-                            flicker: lshift.flicker,
-                            colour: lshift.colour.clone(),
-                        }
-                    );
+                    self.lifx.do_send(LifxControllerSetColour {
+                        addr: b.bulb.addr.clone(),
+                        duration: lshift.duration,
+                        flicker: lshift.flicker,
+                        colour: lshift.colour.clone(),
+                    });
                     // Update the shift event
                     b.last_event = t_now + time::Duration::milliseconds(lshift.duration as i64);
                 }
@@ -341,12 +340,12 @@ impl Handler<LightManagerShift> for LightManager {
                     log_event!(self.log_addr, "No shift for {}", b.bulb.name.as_str());
                 }
             }
-        }; // end for
+        } // end for
     }
 }
 
 pub struct LightManagerPlanChange {
-    plan: plans::LightPlan
+    plan: plans::LightPlan,
 }
 
 impl Message for LightManagerPlanChange {
@@ -356,8 +355,7 @@ impl Message for LightManagerPlanChange {
 impl Handler<LightManagerPlanChange> for LightManager {
     type Result = ();
 
-    fn handle(&mut self, req: LightManagerPlanChange, ctx: &mut Context<Self>) -> Self::Result {
-
+    fn handle(&mut self, req: LightManagerPlanChange, _ctx: &mut Context<Self>) -> Self::Result {
         for b in self.bulbs.iter_mut() {
             let prop_plan = if b.bulb.name == "toilet" {
                 if req.plan == plans::LightPlan::RedshiftMain {
@@ -373,7 +371,12 @@ impl Handler<LightManagerPlanChange> for LightManager {
                 req.plan
             };
             if prop_plan != b.plan {
-                log_event!(self.log_addr, "Changing to proposed plan {} -> {:?}", b.bulb.name.as_str(), prop_plan);
+                log_event!(
+                    self.log_addr,
+                    "Changing to proposed plan {} -> {:?}",
+                    b.bulb.name.as_str(),
+                    prop_plan
+                );
                 // Set the time to 0 to cause the change to be asap
                 b.last_event = time::empty_tm();
                 b.plan = prop_plan;
@@ -399,9 +402,7 @@ pub struct IntervalActor {
 }
 
 impl IntervalActor {
-    pub fn new(log_addr: actix::Addr<LogActor>,
-        lm: actix::Addr<LightManager>
-        ) -> Self {
+    pub fn new(log_addr: actix::Addr<LogActor>, lm: actix::Addr<LightManager>) -> Self {
         IntervalActor {
             log_addr: log_addr,
             lm: lm,
@@ -421,9 +422,7 @@ impl IntervalActor {
         };
         log_event!(self.log_addr, "Checking for party hard ... {:?}", plan);
 
-        self.lm.do_send(LightManagerPlanChange{
-            plan: plan
-        });
+        self.lm.do_send(LightManagerPlanChange { plan: plan });
     }
 }
 
@@ -440,4 +439,3 @@ impl Actor for IntervalActor {
         });
     }
 }
-

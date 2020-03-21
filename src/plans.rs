@@ -4,7 +4,7 @@ use lifx_core::HSBK;
 extern crate time;
 
 extern crate rand;
-use rand::{thread_rng, Rng};
+use rand::{seq::IteratorRandom, thread_rng};
 
 // LightPlans?
 
@@ -45,7 +45,6 @@ static party_colours: [HSBK; 5] = [
         kelvin: 3500,
     },
 ];
-
 
 // struct redshift_main
 fn rshift_calc(vmax: u16, vmin: u16, hour: i32, hlow: i32, hhigh: i32, min: i32) -> u16 {
@@ -112,7 +111,8 @@ impl LightPlan {
                             kelvin: 4000,
                         }
                     } else if hour >= EVENING_END && hour < NIGHT_END {
-                        let bright = rshift_calc(45000, 33000, hour, EVENING_END, NIGHT_END, minute);
+                        let bright =
+                            rshift_calc(45000, 33000, hour, EVENING_END, NIGHT_END, minute);
                         let k = rshift_calc(4000, 2750, hour, EVENING_END, NIGHT_END, minute);
 
                         HSBK {
@@ -128,8 +128,8 @@ impl LightPlan {
                             brightness: 33000,
                             // brightness: 65535,
                             kelvin: 2750,
-                         }
-                    }
+                        }
+                    },
                 }) // End some
             }
             LightPlan::RedshiftKitchen => {
@@ -165,8 +165,8 @@ impl LightPlan {
                             saturation: 0,
                             brightness: 33000,
                             kelvin: 3250,
-                         }
-                    }
+                        }
+                    },
                 }) // End some
             }
             LightPlan::RedshiftToilet => {
@@ -202,8 +202,8 @@ impl LightPlan {
                             saturation: 0,
                             brightness: 7500,
                             kelvin: 150,
-                         }
-                    }
+                        }
+                    },
                 }) // End some
             }
             LightPlan::PartyHardMain => {
@@ -212,24 +212,19 @@ impl LightPlan {
                 Some(LightShift {
                     duration: 2000,
                     flicker: false,
-                    colour: rng.choose(&party_colours)
-                        //std::option::Option<&lifx_core::HSBK>
-                        .unwrap()
-                        .clone()
+                    colour: party_colours.iter().choose(&mut rng).unwrap().clone(),
                 })
             }
-            LightPlan::PartyHardToilet => {
-                Some(LightShift {
-                    duration: 65,
-                    flicker: true,
-                    colour: HSBK {
-                        hue: 45074,
-                        saturation: 65535,
-                        brightness: 39799,
-                        kelvin: 3500
-                    }
-                })
-            }
+            LightPlan::PartyHardToilet => Some(LightShift {
+                duration: 65,
+                flicker: true,
+                colour: HSBK {
+                    hue: 45074,
+                    saturation: 65535,
+                    brightness: 39799,
+                    kelvin: 3500,
+                },
+            }),
             _ => {
                 println!("Do nothing");
                 None
@@ -242,4 +237,3 @@ impl LightPlan {
 // struct party_toilet + expire time?
 
 // struct manual (just store and return a value) + expire time?
-
