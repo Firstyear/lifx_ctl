@@ -16,3 +16,10 @@ Some future goals:
 * Make light plans configurable (rather than hardcoded)
 * Implement the REST front end for App control
 
+To set a colour manually:
+
+    # Blue
+    curl -H "Content-Type: application/json" -X POST -d "{\"hue\": 43634, \"sat\": 65535, \"bri\": 47142, \"k\": 3500}" http://127.0.0.1:8081/manual/office
+    # Red
+    curl -H "Content-Type: application/json" -X POST -d "{\"hue\": 65535, \"sat\": 65535, \"bri\": 65535, \"k\": 3500}" http://127.0.0.1:8081/manual/office
+

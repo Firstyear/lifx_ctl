@@ -170,21 +170,23 @@ pub struct LightBulb {
     name: String,
     addr: SocketAddr,
     current: HSBK,
-    // active_plan: P
-    // plan: plans::LightPlan,
+    default_plan: plans::LightPlan,
+    party_plan: plans::LightPlan,
 }
 
 impl LightBulb {
-    pub fn new(name: String, addr: SocketAddr) -> Self {
+    pub fn new(name: String, addr: SocketAddr, default_plan: plans::LightPlan, party_plan: plans::LightPlan) -> Self {
         LightBulb {
-            name: name,
+            name,
             current: HSBK {
                 hue: 0,
                 saturation: 0,
                 brightness: 0,
                 kelvin: 0,
             },
-            addr: addr,
+            addr,
+            default_plan,
+            party_plan
         }
     }
 
@@ -259,16 +261,7 @@ impl Handler<LightManagerRegister> for LightManager {
     fn handle(&mut self, reg: LightManagerRegister, _: &mut Context<Self>) -> Self::Result {
         log_event!(self.log_addr, "Registered {}", reg.0.name);
 
-        // TODO: This should make a registration object that is mutable.
-        let plan = if reg.0.name == "toilet" {
-            plans::LightPlan::RedshiftToilet
-        } else if reg.0.name == "kitchen" {
-            plans::LightPlan::RedshiftKitchen
-        } else if reg.0.name == "lamp" {
-            plans::LightPlan::Pause
-        } else {
-            plans::LightPlan::RedshiftMain
-        };
+        let plan = reg.0.default_plan.clone();
 
         self.bulbs.push(LightBulbState {
             bulb: reg.0,
@@ -344,44 +337,71 @@ impl Handler<LightManagerShift> for LightManager {
     }
 }
 
-pub struct LightManagerPlanChange {
-    plan: plans::LightPlan,
-}
+pub struct LightManagerPlanStartParty;
 
-impl Message for LightManagerPlanChange {
+impl Message for LightManagerPlanStartParty {
     type Result = ();
 }
 
-impl Handler<LightManagerPlanChange> for LightManager {
+impl Handler<LightManagerPlanStartParty> for LightManager {
     type Result = ();
 
-    fn handle(&mut self, req: LightManagerPlanChange, _ctx: &mut Context<Self>) -> Self::Result {
-        for b in self.bulbs.iter_mut() {
-            let prop_plan = if b.bulb.name == "toilet" {
-                if req.plan == plans::LightPlan::RedshiftMain {
-                    plans::LightPlan::RedshiftToilet
+    fn handle(&mut self, req: LightManagerPlanStartParty, _ctx: &mut Context<Self>) -> Self::Result {
+        self.bulbs.iter_mut().for_each(|mut bstate| {
+            bstate.plan = bstate.bulb.party_plan.clone();
+            // Make it change ASAP
+            bstate.last_event = time::empty_tm();
+        })
+    }
+}
+
+pub struct LightManagerPlanEndParty;
+
+impl Message for LightManagerPlanEndParty {
+    type Result = ();
+}
+
+impl Handler<LightManagerPlanEndParty> for LightManager {
+    type Result = ();
+
+    fn handle(&mut self, req: LightManagerPlanEndParty, _ctx: &mut Context<Self>) -> Self::Result {
+        self.bulbs.iter_mut().for_each(|mut bstate| {
+            bstate.plan = bstate.bulb.default_plan.clone();
+            // Make it change ASAP
+            bstate.last_event = time::empty_tm();
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct LightManagerBulbManual {
+    pub name: String,
+    pub hsbk: lifx_core::HSBK,
+}
+
+impl Message for LightManagerBulbManual {
+    type Result = Option<()>;
+}
+
+impl Handler<LightManagerBulbManual> for LightManager {
+    type Result = Option<()>;
+
+    fn handle(&mut self, req: LightManagerBulbManual, _ctx: &mut Context<Self>) -> Self::Result {
+        self.bulbs.iter_mut().fold(None, |acc, bstate| {
+            if acc.is_none() {
+                // Still looking for the bulb.
+                if bstate.bulb.name == req.name {
+                    // Got it!
+                    bstate.plan = plans::LightPlan::Manual(req.hsbk.clone());
+                    bstate.last_event = time::empty_tm();
+                    Some(())
                 } else {
-                    plans::LightPlan::PartyHardToilet
+                    None
                 }
-            } else if b.bulb.name == "kitchen" {
-                plans::LightPlan::RedshiftKitchen
-            } else if b.bulb.name == "lamp" {
-                plans::LightPlan::Pause
             } else {
-                req.plan
-            };
-            if prop_plan != b.plan {
-                log_event!(
-                    self.log_addr,
-                    "Changing to proposed plan {} -> {:?}",
-                    b.bulb.name.as_str(),
-                    prop_plan
-                );
-                // Set the time to 0 to cause the change to be asap
-                b.last_event = time::empty_tm();
-                b.plan = prop_plan;
-            };
-        }
+                acc
+            }
+        })
     }
 }
 
@@ -410,19 +430,18 @@ impl IntervalActor {
     }
 
     fn bulb_shift(&mut self) {
-        log_event!(self.log_addr, "shift ...");
+        // log_event!(self.log_addr, "shift ...");
         self.lm.do_send(LightManagerShift);
     }
 
-    fn check_party(&mut self) {
-        let plan = if std::path::Path::new("/tmp/partyhard").exists() {
-            plans::LightPlan::PartyHardMain
-        } else {
-            plans::LightPlan::RedshiftMain
-        };
-        log_event!(self.log_addr, "Checking for party hard ... {:?}", plan);
-
-        self.lm.do_send(LightManagerPlanChange { plan: plan });
+    // Probably need an auto daily reset here ---
+    fn end_party_daily(&mut self) {
+        // If it's between 3 - 4 am //
+        let t_now = time::now();
+        if t_now.tm_hour >= 3 && t_now.tm_hour < 4 {
+            log_event!(self.log_addr, "auto-ending the party");
+            self.lm.do_send(LightManagerPlanEndParty);
+        }
     }
 }
 
@@ -434,8 +453,9 @@ impl Actor for IntervalActor {
         ctx.run_interval(Duration::from_millis(1000), move |act, _ctx| {
             act.bulb_shift();
         });
-        ctx.run_interval(Duration::from_millis(10000), move |act, _ctx| {
-            act.check_party();
+        // Every 15 minutes
+        ctx.run_interval(Duration::from_secs(900), move |act, _ctx| {
+            act.end_party_daily();
         });
     }
 }

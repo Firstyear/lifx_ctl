@@ -76,6 +76,7 @@ pub enum LightPlan {
     PartyHardMain,
     PartyHardToilet,
     Pause,
+    Manual(HSBK),
 }
 
 impl LightPlan {
@@ -225,7 +226,15 @@ impl LightPlan {
                     kelvin: 3500,
                 },
             }),
-            _ => {
+            LightPlan::Manual(hsbk) => {
+                println!("Setting manual");
+                Some(LightShift {
+                    duration: 250,
+                    flicker: false,
+                    colour: hsbk.clone(),
+                })
+            }
+            LightPlan::Pause => {
                 println!("Do nothing");
                 None
             }
