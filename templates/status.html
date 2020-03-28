@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+Hello Status
+
+<ul>
+{% for bulb in list %}
+  <li>{{ bulb.name }} - {{ bulb.plan }} - <form><button type="submit" formaction="/manual/{{ bulb.name }}" formmethod="get">Manual</button></form></li>
+{% endfor %}
+</ul>
+
+<form>
+<button type="submit" formaction="/party/start" formmethod="post">Start Party!</button>
+</form>
+
+<form>
+<button type="submit" formaction="/party/end" formmethod="post">End Party :(</button>
+</form>
+
+
+</body>
+</html>
+

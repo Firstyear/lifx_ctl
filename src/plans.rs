@@ -80,6 +80,19 @@ pub enum LightPlan {
 }
 
 impl LightPlan {
+    pub fn to_string(&self) -> String {
+        match self {
+            LightPlan::RedshiftMain => "RedshiftMain",
+            LightPlan::RedshiftToilet => "RedshiftToilet",
+            LightPlan::RedshiftKitchen => "RedshiftKitchen",
+            LightPlan::PartyHardMain => "PartyHardMain",
+            LightPlan::PartyHardToilet => "PartyHardToilet",
+            LightPlan::Pause => "Pause",
+            LightPlan::Manual(_) => "Manual",
+        }
+        .to_string()
+    }
+
     pub fn shift(&self, ts: time::Tm) -> Option<LightShift> {
         let hour = ts.tm_hour;
         let minute = ts.tm_min;
@@ -178,7 +191,11 @@ impl LightPlan {
                 // This may need an extra stepping perhaps
 
                 Some(LightShift {
-                    duration: 4000,
+                    duration: if hour >= DAY_END && hour < NIGHT_END {
+                        800
+                    } else {
+                        4000
+                    },
                     flicker: false,
                     colour: if hour >= DAY_START && hour < DAY_END {
                         HSBK {

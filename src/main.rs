@@ -1,28 +1,49 @@
+#[macro_use]
+extern crate log;
 extern crate actix;
 extern crate actix_web;
 use actix::prelude::*;
-use actix_web::web::{self, Data, HttpResponse, Json, Path};
-use actix_web::{middleware, App, HttpServer};
+use actix_web::web::{self, Data, Form, HttpResponse, Json, Path};
+use actix_web::{guard, middleware, App, HttpServer};
 
 extern crate lifx_ctl;
 use lifx_ctl::*;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
-use crate::{LightManagerPlanStartParty, LightManagerPlanEndParty};
+use crate::{
+    LightBulbStatus, LightManagerBulbReset, LightManagerBulbStatus, LightManagerPlanEndParty,
+    LightManagerPlanStartParty,
+};
 extern crate lifx_core;
 use lifx_core::HSBK;
+
+use askama::Template;
+
+pub static APPLICATION_JSON: &'static str = "application/json";
+pub static APPLICATION_FORM: &'static str = "application/x-www-form-urlencoded";
+pub static CONTENT_TYPE: &'static str = "content-type";
 
 #[macro_use]
 extern crate serde_derive;
 
-// web services act a bit differently from the actor parts above.
+#[derive(Template)]
+#[template(path = "status.html")]
+struct StatusTemplate {
+    pub list: Vec<LightBulbStatus>,
+}
+
+#[derive(Template)]
+#[template(path = "manual.html")]
+struct ManualTemplate {
+    pub status: LightBulbStatus,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct ManualReq {
     hue: u16,
     sat: u16,
     bri: u16,
-    k: u16
+    k: u16,
 }
 
 impl ManualReq {
@@ -31,7 +52,7 @@ impl ManualReq {
             hue: self.hue,
             saturation: self.sat,
             brightness: self.bri,
-            kelvin: self.k
+            kelvin: self.k,
         }
     }
 }
@@ -42,7 +63,27 @@ struct AppState {
 }
 
 async fn index_view() -> HttpResponse {
-    HttpResponse::Ok().body("Hello world!")
+    HttpResponse::Ok().body("Hello Lifx!")
+}
+
+async fn status_view(state: Data<AppState>) -> HttpResponse {
+    let r = state.lightmanager.send(LightManagerStatus).await;
+    let s = match r {
+        Ok(Ok(s)) => s,
+        _ => {
+            return HttpResponse::InternalServerError()
+                .content_type("text/html")
+                .body("manager status")
+        }
+    };
+
+    let t = StatusTemplate { list: s };
+    match t.render() {
+        Ok(s) => HttpResponse::Ok().content_type("text/html").body(s),
+        Err(e) => HttpResponse::InternalServerError()
+            .content_type("text/html")
+            .body(format!("{:?}", e)),
+    }
 }
 
 async fn party_start_view(state: Data<AppState>) -> HttpResponse {
@@ -55,14 +96,59 @@ async fn party_end_view(state: Data<AppState>) -> HttpResponse {
     HttpResponse::Ok().body("Party Over :(")
 }
 
-async fn manual_view((state, name, req): (Data<AppState>, Path<String>, Json<ManualReq>)) -> HttpResponse {
-    let msg = LightManagerBulbManual {
-        name: name.into_inner(),
-        hsbk: req.into_inner().into_hsbk()
+async fn manual_view((state, name): (Data<AppState>, Path<String>)) -> HttpResponse {
+    let r = state
+        .lightmanager
+        .send(LightManagerBulbStatus {
+            name: name.into_inner(),
+        })
+        .await;
+    let s = match r {
+        Ok(Some(s)) => s,
+        _ => {
+            return HttpResponse::InternalServerError()
+                .content_type("text/html")
+                .body("manager status")
+        }
     };
-    println!("SENDING -> {:?}", msg);
+    let t = ManualTemplate { status: s };
+    match t.render() {
+        Ok(s) => HttpResponse::Ok().content_type("text/html").body(s),
+        Err(e) => HttpResponse::InternalServerError()
+            .content_type("text/html")
+            .body(format!("{:?}", e)),
+    }
+}
+
+async fn manual_post_reset((state, name): (Data<AppState>, Path<String>)) -> HttpResponse {
+    let _ = state
+        .lightmanager
+        .send(LightManagerBulbReset {
+            name: name.into_inner(),
+        })
+        .await;
+    HttpResponse::Ok().body("Bulb Reset")
+}
+
+async fn manual_post_generic(state: Data<AppState>, name: String, req: ManualReq) -> HttpResponse {
+    let msg = LightManagerBulbManual {
+        name,
+        hsbk: req.into_hsbk(),
+    };
     let r = state.lightmanager.send(msg).await;
     HttpResponse::Ok().body(format!("Status -> {:?}", r))
+}
+
+async fn manual_post_form(
+    (state, name, req): (Data<AppState>, Path<String>, Form<ManualReq>),
+) -> HttpResponse {
+    manual_post_generic(state, name.into_inner(), req.into_inner()).await
+}
+
+async fn manual_post_json(
+    (state, name, req): (Data<AppState>, Path<String>, Json<ManualReq>),
+) -> HttpResponse {
+    manual_post_generic(state, name.into_inner(), req.into_inner()).await
 }
 
 fn main() {
@@ -80,43 +166,43 @@ fn main() {
         "lounge".to_string(),
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 10)), 56700),
         plans::LightPlan::RedshiftMain,
-        plans::LightPlan::PartyHardMain
+        plans::LightPlan::PartyHardMain,
     );
     let bulb_pole = LightBulb::new(
         "pole".to_string(),
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 12)), 56700),
         plans::LightPlan::RedshiftMain,
-        plans::LightPlan::PartyHardMain
+        plans::LightPlan::PartyHardMain,
     );
     let bulb_toilet = LightBulb::new(
         "toilet".to_string(),
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 13)), 56700),
         plans::LightPlan::RedshiftToilet,
-        plans::LightPlan::PartyHardToilet
+        plans::LightPlan::PartyHardToilet,
     );
     let bulb_office = LightBulb::new(
         "office".to_string(),
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 21)), 56700),
         plans::LightPlan::RedshiftMain,
-        plans::LightPlan::PartyHardMain
+        plans::LightPlan::PartyHardMain,
     );
     let bulb_kitchen = LightBulb::new(
         "kitchen".to_string(),
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 23)), 56700),
         plans::LightPlan::RedshiftKitchen,
-        plans::LightPlan::RedshiftKitchen
+        plans::LightPlan::RedshiftKitchen,
     );
     let bulb_lamp = LightBulb::new(
         "lamp".to_string(),
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 22)), 56700),
         plans::LightPlan::RedshiftMain,
-        plans::LightPlan::PartyHardMain
+        plans::LightPlan::PartyHardMain,
     );
     let bulb_deck = LightBulb::new(
         "deck".to_string(),
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 24, 18, 24)), 56700),
         plans::LightPlan::RedshiftMain,
-        plans::LightPlan::RedshiftMain
+        plans::LightPlan::RedshiftMain,
     );
 
     lm.try_send(LightManagerRegister(bulb_lounge)).unwrap();
@@ -140,13 +226,27 @@ fn main() {
             .wrap(middleware::Logger::default())
             .route("", web::get().to(index_view))
             .route("/", web::get().to(index_view))
-            .route("/party/start", web::get().to(party_start_view))
-            .route("/party/end", web::get().to(party_end_view))
-            .route("/manual/{name}", web::post().to(manual_view))
+            .route("/status", web::get().to(status_view))
+            .route("/party/start", web::post().to(party_start_view))
+            .route("/party/end", web::post().to(party_end_view))
+            .route("/manual/{name}", web::get().to(manual_view))
+            .route(
+                "/manual/{name}",
+                web::post()
+                    .to(manual_post_json)
+                    .guard(guard::Header(CONTENT_TYPE, APPLICATION_JSON)),
+            )
+            .route(
+                "/manual/{name}",
+                web::post()
+                    .to(manual_post_form)
+                    .guard(guard::Header(CONTENT_TYPE, APPLICATION_FORM)),
+            )
+            .route("/manual/{name}/reset", web::post().to(manual_post_reset))
     });
     server.bind("0.0.0.0:8081").unwrap().run();
 
-    println!("Starting event server ...");
+    info!("Starting event server ...");
 
     let _ = sys.run();
 }

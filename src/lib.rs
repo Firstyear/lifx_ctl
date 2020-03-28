@@ -1,3 +1,5 @@
+#[macro_use]
+extern crate log;
 extern crate actix;
 use actix::prelude::*;
 extern crate futures;
@@ -34,7 +36,7 @@ macro_rules! send_bytes {
         let res1 = $sock.send_to($bytes, $addr);
         match res1 {
             Ok(_) => {
-                log_event!($log_addr, "event 1 success");
+                // log_event!($log_addr, "event 1 success");
             }
             Err(e) => {
                 log_event!($log_addr, "Failed to send {}", e);
@@ -44,7 +46,7 @@ macro_rules! send_bytes {
         let res2 = $sock.send_to($bytes, $addr);
         match res2 {
             Ok(_) => {
-                log_event!($log_addr, "event 2 success");
+                // log_event!($log_addr, "event 2 success");
             }
             Err(e) => {
                 log_event!($log_addr, "Failed to send {}", e);
@@ -161,39 +163,32 @@ impl Handler<LifxControllerSetColour> for LifxController {
 
 #[derive(Debug)]
 pub struct LightBulbStatus {
-    name: String,
-    current: HSBK,
+    pub name: String,
+    pub current: HSBK,
+    pub plan: String,
+    pub last_event: String,
 }
 
 #[derive(Debug)]
 pub struct LightBulb {
     name: String,
     addr: SocketAddr,
-    current: HSBK,
     default_plan: plans::LightPlan,
     party_plan: plans::LightPlan,
 }
 
 impl LightBulb {
-    pub fn new(name: String, addr: SocketAddr, default_plan: plans::LightPlan, party_plan: plans::LightPlan) -> Self {
+    pub fn new(
+        name: String,
+        addr: SocketAddr,
+        default_plan: plans::LightPlan,
+        party_plan: plans::LightPlan,
+    ) -> Self {
         LightBulb {
             name,
-            current: HSBK {
-                hue: 0,
-                saturation: 0,
-                brightness: 0,
-                kelvin: 0,
-            },
             addr,
             default_plan,
-            party_plan
-        }
-    }
-
-    pub fn status(&self) -> LightBulbStatus {
-        LightBulbStatus {
-            name: self.name.clone(),
-            current: self.current.clone(),
+            party_plan,
         }
     }
 }
@@ -218,7 +213,7 @@ impl Handler<LogEvent> for LogActor {
     type Result = ();
 
     fn handle(&mut self, event: LogEvent, _: &mut Context<Self>) -> Self::Result {
-        println!("EVENT: {}", event.msg);
+        debug!("{}", event.msg);
     }
 }
 
@@ -226,6 +221,18 @@ struct LightBulbState {
     bulb: LightBulb,
     plan: plans::LightPlan,
     last_event: time::Tm,
+    current: HSBK,
+}
+
+impl LightBulbState {
+    pub fn status(&self) -> LightBulbStatus {
+        LightBulbStatus {
+            name: self.bulb.name.clone(),
+            current: self.current.clone(),
+            plan: self.plan.to_string(),
+            last_event: self.last_event.to_local().rfc3339().to_string(),
+        }
+    }
 }
 
 pub struct LightManager {
@@ -267,6 +274,12 @@ impl Handler<LightManagerRegister> for LightManager {
             bulb: reg.0,
             plan: plan,
             last_event: time::empty_tm(),
+            current: HSBK {
+                hue: 0,
+                saturation: 0,
+                brightness: 0,
+                kelvin: 0,
+            },
         });
 
         Ok(())
@@ -288,7 +301,7 @@ impl Handler<LightManagerStatus> for LightManager {
             .bulbs
             .iter()
             .map(|b| {
-                let s = b.bulb.status();
+                let s = b.status();
                 log_event!(self.log_addr, "status inner: {:?}", s);
                 s
             })
@@ -326,11 +339,13 @@ impl Handler<LightManagerShift> for LightManager {
                         flicker: lshift.flicker,
                         colour: lshift.colour.clone(),
                     });
+                    // Set the current HSBK to what we just sent
+                    b.current = lshift.colour.clone();
                     // Update the shift event
                     b.last_event = t_now + time::Duration::milliseconds(lshift.duration as i64);
                 }
                 _ => {
-                    log_event!(self.log_addr, "No shift for {}", b.bulb.name.as_str());
+                    // log_event!(self.log_addr, "No shift for {}", b.bulb.name.as_str());
                 }
             }
         } // end for
@@ -346,7 +361,11 @@ impl Message for LightManagerPlanStartParty {
 impl Handler<LightManagerPlanStartParty> for LightManager {
     type Result = ();
 
-    fn handle(&mut self, req: LightManagerPlanStartParty, _ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(
+        &mut self,
+        req: LightManagerPlanStartParty,
+        _ctx: &mut Context<Self>,
+    ) -> Self::Result {
         self.bulbs.iter_mut().for_each(|mut bstate| {
             bstate.plan = bstate.bulb.party_plan.clone();
             // Make it change ASAP
@@ -373,6 +392,38 @@ impl Handler<LightManagerPlanEndParty> for LightManager {
     }
 }
 
+pub struct LightManagerBulbStatus {
+    pub name: String,
+}
+
+impl Message for LightManagerBulbStatus {
+    type Result = Option<LightBulbStatus>;
+}
+
+impl Handler<LightManagerBulbStatus> for LightManager {
+    type Result = Option<LightBulbStatus>;
+
+    fn handle(&mut self, req: LightManagerBulbStatus, _ctx: &mut Context<Self>) -> Self::Result {
+        log_event!(self.log_addr, "Bulb Status req");
+        let r = self.bulbs.iter_mut().fold(None, |acc, bstate| {
+            if acc.is_none() {
+                // Still looking for the bulb.
+                if bstate.bulb.name == req.name {
+                    // Got it!
+                    let s = bstate.status();
+                    Some(s)
+                } else {
+                    None
+                }
+            } else {
+                acc
+            }
+        });
+        log_event!(self.log_addr, "status inner: {:?}", r);
+        r
+    }
+}
+
 #[derive(Debug)]
 pub struct LightManagerBulbManual {
     pub name: String,
@@ -393,6 +444,38 @@ impl Handler<LightManagerBulbManual> for LightManager {
                 if bstate.bulb.name == req.name {
                     // Got it!
                     bstate.plan = plans::LightPlan::Manual(req.hsbk.clone());
+                    bstate.last_event = time::empty_tm();
+                    Some(())
+                } else {
+                    None
+                }
+            } else {
+                acc
+            }
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct LightManagerBulbReset {
+    pub name: String,
+}
+
+impl Message for LightManagerBulbReset {
+    type Result = Option<()>;
+}
+
+impl Handler<LightManagerBulbReset> for LightManager {
+    type Result = Option<()>;
+
+    fn handle(&mut self, req: LightManagerBulbReset, _ctx: &mut Context<Self>) -> Self::Result {
+        self.bulbs.iter_mut().fold(None, |acc, bstate| {
+            if acc.is_none() {
+                // Still looking for the bulb.
+                if bstate.bulb.name == req.name {
+                    // Found it
+                    bstate.plan = bstate.bulb.default_plan.clone();
+                    // Make it change ASAP
                     bstate.last_event = time::empty_tm();
                     Some(())
                 } else {
