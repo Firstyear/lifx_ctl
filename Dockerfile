@@ -22,6 +22,7 @@ FROM opensuse/tumbleweed:latest
 EXPOSE 8081
 WORKDIR /
 COPY --from=builder /home/lifx/target/release/lifx_ctl /bin/
+COPY --from=builder /home/lifx/static /static
 RUN zypper install -y sqlite3 openssl timezone
 
 RUN cd /etc && \

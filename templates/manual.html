@@ -1,40 +1,119 @@
-<!DOCTYPE html>
-<html>
-<body>
+{% extends "base.html" %}
+
+{% block title %}{{ status.name }}{% endblock %}
+
+{% block head %}
+<script>
+    $(document).ready(function() {
+
+      const $valueSpanHue = $('#hue-span');
+      const $valueHue = $('#hue');
+
+      const $valueSpanSat = $('#sat-span');
+      const $valueSat = $('#sat');
+
+      const $valueSpanBri = $('#bri-span');
+      const $valueBri = $('#bri');
+
+      const $valueSpanK = $('#k-span');
+      const $valueK = $('#k');
+
+      $valueSpanHue.html($valueHue.val());
+      $valueHue.on('input change', () => {
+        $valueSpanHue.html($valueHue.val());
+      });
+
+      $valueSpanSat.html($valueSat.val());
+      $valueSat.on('input change', () => {
+        $valueSpanSat.html($valueSat.val());
+      });
+
+      $valueSpanBri.html($valueBri.val());
+      $valueBri.on('input change', () => {
+        $valueSpanBri.html($valueBri.val());
+      });
+
+      $valueSpanK.html($valueK.val());
+      $valueK.on('input change', () => {
+        $valueSpanK.html($valueK.val());
+      });
+
+      $('#mform').submit(function(e){
+          e.preventDefault();
+          $.ajax({
+              url:'/manual/{{ status.name }}',
+              contentType:'application/x-www-form-urlencoded',
+              type:'post',
+              traditional:true,
+              data:$('#mform').serialize(),
+              success:function(){
+                location.reload();
+              }
+          });
+      });
+
+      $('#rform').submit(function(e){
+          e.preventDefault();
+          $.ajax({
+              url:'/manual/{{ status.name }}/reset',
+              contentType:'application/x-www-form-urlencoded',
+              type:'post',
+              traditional:true,
+              success:function(){
+                location.reload();
+              }
+          });
+      });
+    });
+</script>
+{% endblock %}
+
+{% block content %}
 <h3>{{ status.name }}</h3>
 
 <ul>
   <li>Plan - {{ status.plan }}</li>
   <li>Last - {{ status.last_event }}</li>
-  <li>Hue - {{ status.current.hue }}</li>
-  <li>Sat - {{ status.current.saturation }}</li>
-  <li>Bri - {{ status.current.brightness }}</li>
-  <li>Kel - {{ status.current.kelvin }}</li>
 </ul>
 
-<form>
+<form id="mform">
   <ul>
     <li>
-      Hue: <input type="text" id="hue" name="hue">
+      <div class="form-group">
+          <label for="hue">Hue</label>
+          <input type="range" class="custom-range" min="0" max="65535" id="hue" name="hue" step="1" value="{{ status.current.hue }}">
+          <span id="hue-span" class="font-weight-bold text-primary ml-2 mt-1 valueSpan"></span>
+      </div>
     </li>
     <li>
-      Sat: <input type="text" id="sat" name="sat">
+      <div class="form-group">
+          <label for="sat">Sat</label>
+          <input type="range" class="custom-range" min="0" max="65535" id="sat" name="sat" step="1" value="{{ status.current.saturation }}">
+          <span id="sat-span" class="font-weight-bold text-primary ml-2 mt-1 valueSpan"></span>
+      </div>
     </li>
     <li>
-      Bri: <input type="text" id="bri" name="bri">
+      <div class="form-group">
+          <label for="bri">Bri</label>
+          <input type="range" class="custom-range" min="0" max="65535" id="bri" name="bri" step="1" value="{{ status.current.brightness }}">
+          <span id="bri-span" class="font-weight-bold text-primary ml-2 mt-1 valueSpan"></span>
+      </div>
     </li>
     <li>
-      K: <input type="text" id="k" name="k">
+      <div class="form-group">
+          <label for="k">K</label>
+          <input type="range" class="custom-range" min="2000" max="9000" id="k" name="k" step="1" value="{{ status.current.kelvin }}">
+          <span id="k-span" class="font-weight-bold text-primary ml-2 mt-1 valueSpan"></span>
+      </div>
     </li>
     <li>
-      <button type="submit" formaction="/manual/{{ status.name }}" formmethod="post">Set Manual Colour</button>
+      <button type="submit" class="btn btn-success">Set Manual Colour</button>
     </li>
   </ul>
 </form>
 
-<form><button type="submit" formaction="/manual/{{ status.name }}/reset" formmethod="post">Reset Plan</button></form>
-
-
-</body>
-</html>
+<form id="rform">
+  <button type="submit" class="btn btn-danger">Reset Plan</button>
+</form>
+{% endblock %}
 

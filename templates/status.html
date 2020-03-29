@@ -1,24 +1,70 @@
-<!DOCTYPE html>
-<html>
-<body>
+{% extends "base.html" %}
 
-Hello Status
+{% block title %}Lifx Status{% endblock %}
 
-<ul>
+{% block head %}
+<script>
+    $(document).ready(function() {
+      $('#sform').submit(function(e){
+          e.preventDefault();
+          $.ajax({
+              url:'/party/start',
+              contentType:'application/x-www-form-urlencoded',
+              type:'post',
+              traditional:true,
+              success:function(){
+                location.reload();
+              }
+          });
+      });
+
+      $('#eform').submit(function(e){
+          e.preventDefault();
+          $.ajax({
+              url:'/party/end',
+              contentType:'application/x-www-form-urlencoded',
+              type:'post',
+              traditional:true,
+              success:function(){
+                location.reload();
+              }
+          });
+      });
+    });
+</script>
+{% endblock %}
+
+{% block content %}
+<h3>Lifx Status</h3>
+
+<table class="table">
+  <thead>
+    <tr>
+      <th scope="col">Name</th>
+      <th scope="col">Plan</th>
+      <th scope="col">#</th>
+    </tr>
+  </thead>
+  <tbody>
 {% for bulb in list %}
-  <li>{{ bulb.name }} - {{ bulb.plan }} - <form><button type="submit" formaction="/manual/{{ bulb.name }}" formmethod="get">Manual</button></form></li>
+    <tr>
+      <td>{{ bulb.name }}</td>
+      <td>{{ bulb.plan }}</td>
+      <td>
+        <form><button class="btn btn-info"  type="submit" formaction="/manual/{{ bulb.name }}" formmethod="get">Manage</button></form>
+      </td>
+
+    </tr>
 {% endfor %}
-</ul>
+  </tbody>
+</table>
 
-<form>
-<button type="submit" formaction="/party/start" formmethod="post">Start Party!</button>
+<form id="sform">
+<button type="submit" class="btn btn-success">Start Party!</button>
 </form>
 
-<form>
-<button type="submit" formaction="/party/end" formmethod="post">End Party :(</button>
+<form id="eform">
+<button type="submit" class="btn btn-danger">End Party :(</button>
 </form>
 
-
-</body>
-</html>
-
+{% endblock %}

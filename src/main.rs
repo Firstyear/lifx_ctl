@@ -3,6 +3,7 @@ extern crate log;
 extern crate actix;
 extern crate actix_web;
 use actix::prelude::*;
+use actix_files as fs;
 use actix_web::web::{self, Data, Form, HttpResponse, Json, Path};
 use actix_web::{guard, middleware, App, HttpServer};
 
@@ -224,6 +225,7 @@ fn main() {
                 lightmanager: lm.clone(),
             })
             .wrap(middleware::Logger::default())
+            .service(fs::Files::new("/static", "./static"))
             .route("", web::get().to(index_view))
             .route("/", web::get().to(index_view))
             .route("/status", web::get().to(status_view))

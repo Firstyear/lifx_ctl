@@ -243,18 +243,12 @@ impl LightPlan {
                     kelvin: 3500,
                 },
             }),
-            LightPlan::Manual(hsbk) => {
-                println!("Setting manual");
-                Some(LightShift {
-                    duration: 250,
-                    flicker: false,
-                    colour: hsbk.clone(),
-                })
-            }
-            LightPlan::Pause => {
-                println!("Do nothing");
-                None
-            }
+            LightPlan::Manual(hsbk) => Some(LightShift {
+                duration: 250,
+                flicker: false,
+                colour: hsbk.clone(),
+            }),
+            LightPlan::Pause => None,
         }
     }
 }
