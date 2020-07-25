@@ -36,16 +36,14 @@ pub static CONTENT_TYPE: &'static str = "content-type";
 #[template(path = "wasm.html")]
 struct WasmTemplate;
 
-#[derive(Template)]
-#[template(path = "status.html")]
-struct StatusTemplate {
-    pub list: Vec<LightBulbStatus>,
-}
-
-#[derive(Template)]
-#[template(path = "manual.html")]
-struct ManualTemplate {
-    pub status: LightBulbStatus,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ManualStatus {
+    name: String,
+    plan: String,
+    hue: u16,
+    sat: u16,
+    bri: u16,
+    k: u16,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -86,26 +84,6 @@ async fn status_view() -> HttpResponse {
     HttpResponse::Ok().body("Ok")
 }
 
-async fn index_view(state: Data<AppState>) -> HttpResponse {
-    let r = state.lightmanager.send(LightManagerStatus).await;
-    let s = match r {
-        Ok(Ok(s)) => s,
-        _ => {
-            return HttpResponse::InternalServerError()
-                .content_type("text/html")
-                .body("manager status")
-        }
-    };
-
-    let t = StatusTemplate { list: s };
-    match t.render() {
-        Ok(s) => HttpResponse::Ok().content_type("text/html").body(s),
-        Err(e) => HttpResponse::InternalServerError()
-            .content_type("text/html")
-            .body(format!("{:?}", e)),
-    }
-}
-
 async fn party_start_view(state: Data<AppState>) -> HttpResponse {
     let _ = state.lightmanager.send(LightManagerPlanStartParty).await;
     HttpResponse::Ok().body("Party Started!!")
@@ -123,20 +101,23 @@ async fn manual_view((state, name): (Data<AppState>, Path<String>)) -> HttpRespo
             name: name.into_inner(),
         })
         .await;
-    let s = match r {
-        Ok(Some(s)) => s,
+    match r {
+        Ok(Some(s)) => {
+            let r = ManualStatus {
+                name: s.name,
+                plan: s.plan,
+                hue: s.current.hue,
+                sat: s.current.saturation,
+                bri: s.current.brightness,
+                k: s.current.kelvin,
+            };
+            HttpResponse::Ok().json(r)
+        }
         _ => {
-            return HttpResponse::InternalServerError()
+            HttpResponse::InternalServerError()
                 .content_type("text/html")
                 .body("manager status")
         }
-    };
-    let t = ManualTemplate { status: s };
-    match t.render() {
-        Ok(s) => HttpResponse::Ok().content_type("text/html").body(s),
-        Err(e) => HttpResponse::InternalServerError()
-            .content_type("text/html")
-            .body(format!("{:?}", e)),
     }
 }
 
@@ -246,10 +227,9 @@ fn main() {
             .wrap(middleware::Logger::default())
             .service(fs::Files::new("/static", "./static"))
             .service(fs::Files::new("/pkg", "./pkg"))
-            .route("", web::get().to(index_view))
-            .route("/", web::get().to(index_view))
+            .route("", web::get().to(wasm_view))
+            .route("/", web::get().to(wasm_view))
             .route("/status", web::get().to(status_view))
-            .route("/wasm", web::get().to(wasm_view))
             .route("/party/start", web::post().to(party_start_view))
             .route("/party/end", web::post().to(party_end_view))
             .route("/manual/{name}", web::get().to(manual_view))
@@ -258,12 +238,6 @@ fn main() {
                 web::post()
                     .to(manual_post_json)
                     .guard(guard::Header(CONTENT_TYPE, APPLICATION_JSON)),
-            )
-            .route(
-                "/manual/{name}",
-                web::post()
-                    .to(manual_post_form)
-                    .guard(guard::Header(CONTENT_TYPE, APPLICATION_FORM)),
             )
             .route("/manual/{name}/reset", web::post().to(manual_post_reset))
     });
