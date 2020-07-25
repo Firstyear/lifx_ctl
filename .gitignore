@@ -1,2 +1,4 @@
 /target
 **/*.rs.bk
+static/bundle.js
+lifx_wasm/pkg

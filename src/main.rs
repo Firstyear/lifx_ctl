@@ -33,6 +33,10 @@ pub static APPLICATION_FORM: &'static str = "application/x-www-form-urlencoded";
 pub static CONTENT_TYPE: &'static str = "content-type";
 
 #[derive(Template)]
+#[template(path = "wasm.html")]
+struct WasmTemplate;
+
+#[derive(Template)]
 #[template(path = "status.html")]
 struct StatusTemplate {
     pub list: Vec<LightBulbStatus>,
@@ -66,6 +70,16 @@ impl ManualReq {
 struct AppState {
     _log_addr: actix::Addr<LogActor>,
     lightmanager: actix::Addr<LightManager>,
+}
+
+async fn wasm_view() -> HttpResponse {
+    let t = WasmTemplate;
+    match t.render() {
+        Ok(s) => HttpResponse::Ok().content_type("text/html").body(s),
+        Err(e) => HttpResponse::InternalServerError()
+            .content_type("text/html")
+            .body(format!("{:?}", e)),
+    }
 }
 
 async fn status_view() -> HttpResponse {
@@ -231,9 +245,11 @@ fn main() {
             })
             .wrap(middleware::Logger::default())
             .service(fs::Files::new("/static", "./static"))
+            .service(fs::Files::new("/pkg", "./pkg"))
             .route("", web::get().to(index_view))
             .route("/", web::get().to(index_view))
             .route("/status", web::get().to(status_view))
+            .route("/wasm", web::get().to(wasm_view))
             .route("/party/start", web::post().to(party_start_view))
             .route("/party/end", web::post().to(party_end_view))
             .route("/manual/{name}", web::get().to(manual_view))
