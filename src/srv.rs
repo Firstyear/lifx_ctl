@@ -1,22 +1,12 @@
-#[macro_use]
-extern crate log;
-extern crate actix;
+use crate::plans;
 use actix::prelude::*;
-extern crate futures;
-
 use std::net::SocketAddr;
 use std::net::UdpSocket;
 use std::time::Duration;
 
-extern crate time;
-
-extern crate lifx_core;
 use lifx_core::HSBK;
 
-extern crate rand;
 use rand::{thread_rng, Rng};
-
-pub mod plans;
 
 // Helper for internal logging.
 macro_rules! log_event {

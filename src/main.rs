@@ -1,31 +1,36 @@
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate serde_derive;
 extern crate actix;
 extern crate actix_web;
+extern crate futures;
+extern crate lifx_core;
+extern crate rand;
+extern crate time;
+
 use actix::prelude::*;
 use actix_files as fs;
 use actix_web::web::{self, Data, Form, HttpResponse, Json, Path};
 use actix_web::{guard, middleware, App, HttpServer};
-
-extern crate lifx_ctl;
-use lifx_ctl::*;
+use askama::Template;
+use lifx_core::HSBK;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
-use crate::{
+mod plans;
+mod srv;
+use srv::*;
+
+/*
+use sr::{
     LightBulbStatus, LightManagerBulbReset, LightManagerBulbStatus, LightManagerPlanEndParty,
     LightManagerPlanStartParty,
 };
-extern crate lifx_core;
-use lifx_core::HSBK;
-
-use askama::Template;
+*/
 
 pub static APPLICATION_JSON: &'static str = "application/json";
 pub static APPLICATION_FORM: &'static str = "application/x-www-form-urlencoded";
 pub static CONTENT_TYPE: &'static str = "content-type";
-
-#[macro_use]
-extern crate serde_derive;
 
 #[derive(Template)]
 #[template(path = "status.html")]
@@ -63,11 +68,11 @@ struct AppState {
     lightmanager: actix::Addr<LightManager>,
 }
 
-async fn index_view() -> HttpResponse {
-    HttpResponse::Ok().body("Hello Lifx!")
+async fn status_view() -> HttpResponse {
+    HttpResponse::Ok().body("Ok")
 }
 
-async fn status_view(state: Data<AppState>) -> HttpResponse {
+async fn index_view(state: Data<AppState>) -> HttpResponse {
     let r = state.lightmanager.send(LightManagerStatus).await;
     let s = match r {
         Ok(Ok(s)) => s,
@@ -246,7 +251,7 @@ fn main() {
             )
             .route("/manual/{name}/reset", web::post().to(manual_post_reset))
     });
-    server.bind("0.0.0.0:8081").unwrap().run();
+    server.bind("[::]:8081").unwrap().run();
 
     info!("Starting event server ...");
 

@@ -202,17 +202,15 @@ fn simple_setup() {
 
         lmaddr.try_send(LightManagerRegister(tbulb_1)).unwrap();
 
-        tokio::spawn(
-            async move {
-                let r = lmaddr
-                    .send(LightManagerStatus)
-                    .await
-                    .expect("Failed to register");
-                assert!(r.is_ok());
-                // Okay now stop-pu!
-                actix::System::current().stop();
-            },
-        );
+        tokio::spawn(async move {
+            let r = lmaddr
+                .send(LightManagerStatus)
+                .await
+                .expect("Failed to register");
+            assert!(r.is_ok());
+            // Okay now stop-pu!
+            actix::System::current().stop();
+        });
     })
     .expect("System run failed!");
 }
