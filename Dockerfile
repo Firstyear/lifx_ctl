@@ -36,6 +36,7 @@ RUN cd /etc && \
 
 COPY --from=builder /home/lifx/target/release/lifx_ctl /bin/
 COPY --from=builder /home/lifx/static /static
+COPY --from=builder /home/lifx/pkg /pkg
 
 ENV RUST_BACKTRACE 1
 CMD ["/bin/lifx_ctl"]
